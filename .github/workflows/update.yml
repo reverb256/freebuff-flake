@@ -1,0 +1,56 @@
+name: Update Freebuff Version
+
+on:
+  schedule:
+    # Every Monday at 4am UTC
+    - cron: '0 4 * * 1'
+  workflow_dispatch:         # Allow manual trigger
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    name: Bump to latest upstream
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Run bump script
+        id: bump
+        run: |
+          OUT=$(scripts/bump-version.sh 2>&1)
+          echo "$OUT"
+          echo "result<<HEREDOC" >> $GITHUB_OUTPUT
+          echo "$OUT" >> $GITHUB_OUTPUT
+          echo "HEREDOC" >> $GITHUB_OUTPUT
+          # Detect if an update actually happened
+          if echo "$OUT" | grep -q "Update complete"; then
+            echo "updated=true" >> $GITHUB_OUTPUT
+          else
+            echo "updated=false" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+      - name: Create Pull Request
+        if: steps.bump.outputs.updated == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: |
+            chore: bump freebuff-desktop to latest upstream
+
+            ${{ steps.bump.outputs.result }}
+          title: 'chore: bump freebuff-desktop to latest upstream'
+          body: |
+            ${{ steps.bump.outputs.result }}
+          branch: auto/bump-freebuff
+          base: main
+          labels: automated, dependencies
