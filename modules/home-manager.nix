@@ -12,7 +12,7 @@ let
   # Reference them directly from the flake input — but we need `inputs` which is available
   # via extraSpecialArgs. If not available, fall back to pkgs (for backward compat with
   # the now-removed overlay).
-  fbpkgs = if builtins.hasAttr "freebuff-flake" (builtins.tryEval inputs).value or {}
+  fbpkgs = if builtins ? inputs && builtins.hasAttr "freebuff-flake" inputs
     then inputs.freebuff-flake.packages.${pkgs.stdenv.hostPlatform.system}
     else pkgs;
   iconPath = "${config.home.homeDirectory}/.local/share/freebuff/extracted/@codebufffreebuff-desktop.png";
