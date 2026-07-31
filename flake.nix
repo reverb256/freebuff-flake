@@ -10,17 +10,19 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
+        freebuff-desktop = pkgs.callPackage ./pkgs/freebuff-desktop.nix { };
+        freebuff-desktop-wrapper = pkgs.callPackage ./pkgs/freebuff-wrapper.nix {
+          inherit freebuff-desktop;
+        };
       in
       {
         packages = {
-          freebuff-desktop = pkgs.callPackage ./pkgs/freebuff-desktop.nix { };
+          inherit freebuff-desktop freebuff-desktop-wrapper;
         };
-        defaultPackage = self.packages.${system}.freebuff-desktop;
+        defaultPackage = freebuff-desktop;
 
-        apps = {
-          freebuff-desktop = flake-utils.lib.mkApp {
-            drv = self.packages.${system}.freebuff-desktop;
-          };
+        apps.freebuff-desktop = flake-utils.lib.mkApp {
+          drv = freebuff-desktop-wrapper;
         };
         defaultApp = self.apps.${system}.freebuff-desktop;
 
@@ -32,5 +34,8 @@
             gnused
           ];
         };
-      });
+      }) // {
+      # Home-manager module (importable by nixos-config)
+      homeModules.default = import ./modules/home-manager.nix;
+    };
 }
