@@ -7,33 +7,36 @@
 with lib;
 let
   cfg = config.programs.freebuff-desktop;
-  # Icon lives inside the runtime-extracted AppDir. The wrapper guarantees
-  # extraction on first launch, so this path exists after the first run.
+  # Resolve the flake's packages. When consumed via inputs.freebuff-flake.homeModules.default,
+  # `pkgs` is the consumer's nixpkgs, which doesn't have freebuff-desktop unless overlaid.
+  # Reference them directly from the flake input — but we need `inputs` which is available
+  # via extraSpecialArgs. If not available, fall back to pkgs (for backward compat with
+  # the now-removed overlay).
+  fbpkgs = if builtins.hasAttr "freebuff-flake" (builtins.tryEval inputs).value or {}
+    then inputs.freebuff-flake.packages.${pkgs.stdenv.hostPlatform.system}
+    else pkgs;
   iconPath = "${config.home.homeDirectory}/.local/share/freebuff/extracted/@codebufffreebuff-desktop.png";
 in {
   options.programs.freebuff-desktop = {
     enable = mkEnableOption "Freebuff Desktop — GitHub-native coding-agent orchestrator";
     package = mkOption {
       type = types.package;
-      default = pkgs.freebuff-desktop;
+      default = fbpkgs.freebuff-desktop;
       description = "The FHS-wrapped freebuff-desktop AppImage (build artifact).";
     };
     wrapper = mkOption {
       type = types.package;
-      default = pkgs.freebuff-desktop-wrapper;
+      default = fbpkgs.freebuff-desktop-wrapper;
       description = "Runtime launcher with GPU fixes and auto-update.";
     };
   };
 
   config = mkIf cfg.enable {
     home.packages = [
-      cfg.package   # FHS-wrapped AppImage (appimageTools.wrapType2)
-      cfg.wrapper   # Runtime launcher (GPU, updates, extraction)
+      cfg.package
+      cfg.wrapper
     ];
 
-    # Stylix limitation — see STYLIX-LIMITATION.md
-    # Freebuff's Electron UI has no theme hooks. The launcher icon is a
-    # runtime-extracted PNG, not a Stylix-themed icon.
     xdg.configFile."freebuff-desktop/STYLIX-LIMITATION.md".text = ''
       # Freebuff Desktop — Stylix theming limitation
 
@@ -51,8 +54,6 @@ in {
       palette and is unaffected by Stylix.
     '';
 
-    # .desktop entry — points to the runtime wrapper, not the Nix package.
-    # The wrapper handles GPU library injection, updates, and extraction.
     xdg.desktopEntries."freebuff-desktop" = {
       name = "Freebuff";
       genericName = "Coding Agent Orchestrator";
