@@ -63,7 +63,7 @@ in {
       terminal = false;
       type = "Application";
       categories = ["Development" "Utility"];
-      startupWMClass = "Freebuff";
+      mimeType = ["x-scheme-handler/claude"];
     };
   };
 }
