@@ -55,7 +55,7 @@ in {
       name = "Freebuff";
       genericName = "Coding Agent Orchestrator";
       comment = "Freebuff Desktop — GitHub-native coding-agent orchestrator";
-      exec = "${cfg.wrapper}/bin/freebuff-desktop %U";
+      exec = "${cfg.wrapper}/bin/freebuff-desktop-launcher %U";
       icon = iconPath;
       terminal = false;
       type = "Application";
