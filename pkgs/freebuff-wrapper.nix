@@ -14,7 +14,7 @@ stdenvNoCC.mkDerivation {
   installPhase = ''
     mkdir -p $out/bin
     sed -e 's|@version@|${freebuff-desktop.version}|g' \
-        ${./wrapper/freebuff-desktop.sh} > $out/bin/freebuff-desktop
+        ${../wrapper/freebuff-desktop.sh} > $out/bin/freebuff-desktop
     chmod +x $out/bin/freebuff-desktop
   '';
 
