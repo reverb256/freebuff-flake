@@ -1,5 +1,6 @@
 {
   config,
+  inputs,
   lib,
   pkgs,
   ...
@@ -7,14 +8,10 @@
 with lib;
 let
   cfg = config.programs.freebuff-desktop;
-  # Resolve the flake's packages. When consumed via inputs.freebuff-flake.homeModules.default,
-  # `pkgs` is the consumer's nixpkgs, which doesn't have freebuff-desktop unless overlaid.
-  # Reference them directly from the flake input — but we need `inputs` which is available
-  # via extraSpecialArgs. If not available, fall back to pkgs (for backward compat with
-  # the now-removed overlay).
-  fbpkgs = if builtins ? inputs && builtins.hasAttr "freebuff-flake" inputs
-    then inputs.freebuff-flake.packages.${pkgs.stdenv.hostPlatform.system}
-    else pkgs;
+  # Resolve packages from the parent flake (guaranteed via extraSpecialArgs).
+  # Not using pkgs directly because the consumer's nixpkgs doesn't include
+  # freebuff-desktop unless overlaid.
+  fbpkgs = inputs.freebuff-flake.packages.x86_64-linux;
   iconPath = "${config.home.homeDirectory}/.local/share/freebuff/extracted/@codebufffreebuff-desktop.png";
 in {
   options.programs.freebuff-desktop = {
