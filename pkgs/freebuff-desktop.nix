@@ -12,12 +12,12 @@ let
   src = fetchurl {
     url = "https://freebuff.com/api/desktop/download/linux";
     # Auto-bumped — do not edit manually. Run: nix run .#update-hash
-    sha256 = "sha256-U/T6NEsA8DhFiktR8FOsxiPxHnBrW+XGlhyfd26gedg=";
+    sha256 = "sha256-D2IBphrtixZFpwbQ8n2Ow/LmqyhOTlUhTf6NUoYMQIo=";
   };
 in
 appimageTools.wrapType2 {
   inherit pname src;
-  version = "0.0.42";
+  version = "0.0.47";
 
   extraPkgs = pkgs:
     with pkgs; [
