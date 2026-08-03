@@ -12,7 +12,7 @@ let
   src = fetchurl {
     url = "https://freebuff.com/api/desktop/download/linux";
     # Auto-bumped — do not edit manually. Run: nix run .#update-hash
-    sha256 = "sha256-6pesMiaXr/KKEtgnvy6RKRPA+KmMYIT2FAy88OVYn2I=";
+    sha256 = "sha256-U/T6NEsA8DhFiktR8FOsxiPxHnBrW+XGlhyfd26gedg=";
   };
 in
 appimageTools.wrapType2 {
