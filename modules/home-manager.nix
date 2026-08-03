@@ -28,12 +28,13 @@ in {
     };
   };
 
+  # NOTE: the freebuff-desktop package is intentionally NOT installed via
+  # home.packages here. It is installed through `nix profile install`
+  # (Layer 3) so a stale upstream AppImage hash can never block
+  # `home-manager switch` builds. This module only manages the declarative
+  # launcher (.desktop) and the Stylix-limitation doc; the package/wrapper
+  # are expected to already be on PATH via the user nix profile.
   config = mkIf cfg.enable {
-    home.packages = [
-      cfg.package
-      cfg.wrapper
-    ];
-
     xdg.configFile."freebuff-desktop/STYLIX-LIMITATION.md".text = ''
       # Freebuff Desktop — Stylix theming limitation
 
