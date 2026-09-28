@@ -25,12 +25,12 @@ let
   src = fetchurl {
     url = "https://freebuff.com/api/desktop/download/linux";
     # Auto-bumped — do not edit manually. Run: nix run .#update-hash
-    sha256 = "sha256-U/T6NEsA8DhFiktR8FOsxiPxHnBrW+XGlhyfd26gedg=";
+    sha256 = "sha256-Gwh2sHK9m2zlVHN0bINIUud42Z2x8uDsz6QOYt/T7l4=";
   };
 in
 appimageTools.wrapType2 {
   inherit pname src;
-  version = "0.0.63";
+  version = "0.0.151";
 
   # Libraries Electron's GPU/GL stack needs inside the FHS sandbox.
   extraPkgs = pkgs:
