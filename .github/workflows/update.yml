@@ -25,6 +25,10 @@ jobs:
 
       - name: Run bump script
         id: bump
+        env:
+          # Raises the GitHub API rate limit; the script falls back to the
+          # asset URL if this is absent.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           OUT=$(scripts/bump-version.sh 2>&1)
           echo "$OUT"

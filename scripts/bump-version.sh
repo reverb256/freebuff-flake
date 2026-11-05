@@ -35,6 +35,14 @@ readonly ENDPOINT="https://freebuff.com/api/desktop/download/linux"
 log()  { echo "[bump] $*"; }
 die()  { echo "[bump] ERROR: $*" >&2; exit 1; }
 
+# Authenticate GitHub API calls when a token is available: runners share IPs
+# and the unauthenticated limit (60/h) is routinely exhausted. Every API call
+# below has a non-API fallback, so this is an optimisation, not a requirement.
+AUTH=()
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+  AUTH=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+fi
+
 [ -f "$PKG_FILE" ] || die "cannot find $PKG_FILE (run from the repo root)"
 
 # ── 1. Resolve the latest desktop version ───────────────────────────────
@@ -48,17 +56,17 @@ if [[ "$LOCATION" =~ /download/${TAG_PREFIX}([0-9]+\.[0-9]+\.[0-9]+)/ ]]; then
   log "endpoint points at ${TAG_PREFIX}${VERSION}"
 fi
 
-# 1b. Fallback: highest desktop release tag on GitHub (endpoint unreachable,
-#     or upstream changed the endpoint again).
+# 1b. Fallback: highest desktop tag in the upstream git repo. One request,
+#     complete tag list, no API rate limit (the release list is not ordered
+#     by desktop version, so scanning it would need many pages).
 if [ -z "$VERSION" ]; then
-  log "falling back to GitHub release tags …"
-  RELEASES=$(curl -fsS --max-time 60 "${API}/releases?per_page=100" 2>/dev/null || true)
-  VERSION=$(printf '%s\n' "$RELEASES" \
-    | grep -o "\"tag_name\": *\"${TAG_PREFIX}[0-9][0-9.]*\"" \
-    | sed -e 's/.*\.v//' -e 's/"$//' | sort -V | tail -1 || true)
+  log "falling back to upstream git tags …"
+  VERSION=$(git ls-remote --tags --refs "https://github.com/${REPO}.git" 2>/dev/null \
+    | sed "s|.*refs/tags/${TAG_PREFIX}||" \
+    | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
 fi
 
-[ -n "$VERSION" ] || die "could not determine the latest version (endpoint and GitHub API both unhelpful)"
+[ -n "$VERSION" ] || die "could not determine the latest version (endpoint unreachable and no desktop git tags found)"
 log "latest version: $VERSION"
 
 TAG="${TAG_PREFIX}${VERSION}"
@@ -67,7 +75,7 @@ ASSET_URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET}"
 
 # ── 2. Confirm the AppImage asset actually exists for this release ─────
 log "checking asset: $ASSET"
-ASSET_FOUND=$(curl -fsS --max-time 30 "${API}/releases/tags/${TAG}" 2>/dev/null \
+ASSET_FOUND=$(curl "${AUTH[@]}" -fsS --max-time 30 "${API}/releases/tags/${TAG}" 2>/dev/null \
   | grep -o "https://[^\"]*/${ASSET}" | head -1 || true)
 
 if [ -z "$ASSET_FOUND" ]; then
