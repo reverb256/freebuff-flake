@@ -9,7 +9,7 @@ on:
 jobs:
   build:
     name: Build freebuff-desktop
-    runs-on: ubuntu-latest
+    runs-on: arc-freebuff-flake
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,7 +29,67 @@ jobs:
         run: nix build .#freebuff-desktop --print-out-paths
 
       - name: Check derivation metadata
+        shell: bash
         run: |
-          VERSION=$(nix eval .#freebuff-desktop.version --raw)
+          set -euo pipefail
+
+          # The Build step above has already populated the store, so evaluate
+          # offline first: the GitHub runners' IPv6 route to cache.nixos.org
+          # fails ("Could not connect to server") before falling back to IPv4,
+          # and an offline eval sidesteps that entirely. Only if the store
+          # turns out to be incomplete do we retry with network access.
+          nix_eval() {
+            nix --offline eval .#freebuff-desktop.version --raw 2>/dev/null \
+              || nix eval .#freebuff-desktop.version --raw
+          }
+          nix_derivation_show() {
+            nix --offline derivation show .#freebuff-desktop 2>/dev/null \
+              || nix derivation show .#freebuff-desktop
+          }
+
+          VERSION=$(nix_eval)
           echo "Package version: $VERSION"
-          nix derivation show .#freebuff-desktop | jq -r '.[].name'
+
+          # `nix derivation show` emits a JSON map of .drv store path -> derivation
+          # object, but the format is explicitly experimental and has changed
+          # shape before. Capture it, validate it, and parse defensively, so an
+          # unexpected payload (an error/rate-limit document, a bare number, a
+          # future array form) fails with a readable message instead of jq's
+          # bare "Cannot index number with string \"name\"" + exit 5.
+          if ! DRV_JSON=$(nix_derivation_show); then
+            echo "::error::nix derivation show .#freebuff-desktop failed"
+            exit 1
+          fi
+
+          if ! printf '%s\n' "$DRV_JSON" | jq -e 'type' >/dev/null 2>&1; then
+            echo "::error::nix derivation show did not return valid JSON; got:"
+            printf '%s\n' "$DRV_JSON" | head -c 800
+            echo
+            exit 1
+          fi
+
+          if ! NAME=$(printf '%s\n' "$DRV_JSON" | jq -er '
+                if type == "object" then
+                  # Current Nix wraps the map as {"derivations": {...}}; older
+                  # versions emit the .drv path -> derivation map directly.
+                  (.derivations // .)
+                  | to_entries | map(select(.value | type == "object") | .value.name)
+                elif type == "array" then
+                  map(select(type == "object") | .name)
+                else
+                  error("nix derivation show returned \(type), expected an object or array")
+                end
+                | map(select(. != null))
+                | if length == 0 then
+                    error("no derivation object carrying a .name field")
+                  else .[0] end
+              '); then
+            echo "::error::could not read a derivation name from nix derivation show; got:"
+            printf '%s\n' "$DRV_JSON" | head -c 800
+            echo
+            exit 1
+          fi
+
+          echo "Derivation name: $NAME"
+          [ "$NAME" = "freebuff-desktop-${VERSION}" ] \
+            || echo "::warning::derivation name '${NAME}' does not match version '${VERSION}'"
