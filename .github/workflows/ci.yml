@@ -70,7 +70,10 @@ jobs:
 
           if ! NAME=$(printf '%s\n' "$DRV_JSON" | jq -er '
                 if type == "object" then
-                  to_entries | map(select(.value | type == "object") | .value.name)
+                  # Current Nix wraps the map as {"derivations": {...}}; older
+                  # versions emit the .drv path -> derivation map directly.
+                  (.derivations // .)
+                  | to_entries | map(select(.value | type == "object") | .value.name)
                 elif type == "array" then
                   map(select(type == "object") | .name)
                 else
