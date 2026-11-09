@@ -10,9 +10,16 @@ jobs:
   build:
     name: Build freebuff-desktop
     runs-on: arc-freebuff-flake
+    env:
+      # The self-hosted ARC runner pod has no USER in its environment;
+      # cachix-action aborts with "$USER must be set" without it.
+      USER: runner
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Regression check (bump script, offline)
+        run: bash tests/bump-version.sh
 
       - name: Install Nix
         uses: cachix/install-nix-action@v31
