@@ -32,11 +32,11 @@
 # release: scripts/bump-version.sh rewrites `version` + `sha256` below.
 let
   pname = "freebuff-desktop";
-  version = "0.0.200";
+  version = "0.0.201";
   src = fetchurl {
     url = "https://github.com/CodebuffAI/codebuff-community/releases/download/freebuff-desktop-v${version}/Freebuff-${version}-linux-x86_64.AppImage";
     # Auto-bumped — do not edit manually. Run: scripts/bump-version.sh
-    sha256 = "sha256-BKyKW1eUlMs/atVLL07agoceaHNhCZBvdQuiF2fsEGw=";
+    sha256 = "sha256-CaWhLJ59P+TH3ZmEDdrCOMZ9OXXl2do9qjb/8dGZ58g=";
   };
 in
 appimageTools.wrapType2 {
