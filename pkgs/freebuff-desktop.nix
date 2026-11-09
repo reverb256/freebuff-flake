@@ -5,7 +5,16 @@
 }:
 # Freebuff Desktop — Codebuff's free coding-agent GUI (Electron AppImage).
 #
-# NixOS package wrapping the desktop AppImage from https://freebuff.com/api/desktop/download/linux
+# NixOS package wrapping the desktop AppImage published at
+#   https://github.com/CodebuffAI/codebuff-community/releases
+# (tag freebuff-desktop-v<version>) — the same artifact upstream's
+# https://freebuff.com/api/desktop/download/linux endpoint redirects to.
+#
+# The URL is built from `version` on purpose: the freebuff.com endpoint is a
+# floating 302 whose payload changes on every release (and since 2026-11 it
+# serves a .deb on Linux, not the AppImage). Pinning fetchurl to that endpoint
+# makes the build irreproducible — the pinned sha256 stops matching and
+# `nix build` fails — so we pin the versioned release asset instead.
 #
 # Best-practice Electron-AppImage-on-NixOS packaging (pattern from nixpkgs
 # pkgs/by-name/os/osu-lazer-bin):
@@ -19,18 +28,19 @@
 #     the launcher (freebuff-desktop-latest), which can choose Wayland or
 #     XWayland without wedging the compositor.
 #
-# Auto-bumped by .github/workflows/update.yml when upstream ships a new release.
+# Auto-bumped by .github/workflows/update.yml when upstream ships a new
+# release: scripts/bump-version.sh rewrites `version` + `sha256` below.
 let
   pname = "freebuff-desktop";
+  version = "0.0.201";
   src = fetchurl {
-    url = "https://freebuff.com/api/desktop/download/linux";
-    # Auto-bumped — do not edit manually. Run: nix run .#update-hash
-    sha256 = "sha256-U/T6NEsA8DhFiktR8FOsxiPxHnBrW+XGlhyfd26gedg=";
+    url = "https://github.com/CodebuffAI/codebuff-community/releases/download/freebuff-desktop-v${version}/Freebuff-${version}-linux-x86_64.AppImage";
+    # Auto-bumped — do not edit manually. Run: scripts/bump-version.sh
+    sha256 = "sha256-CaWhLJ59P+TH3ZmEDdrCOMZ9OXXl2do9qjb/8dGZ58g=";
   };
 in
 appimageTools.wrapType2 {
-  inherit pname src;
-  version = "0.0.63";
+  inherit pname src version;
 
   # Libraries Electron's GPU/GL stack needs inside the FHS sandbox.
   extraPkgs = pkgs:
