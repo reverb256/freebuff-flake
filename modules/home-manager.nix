@@ -12,7 +12,9 @@ let
   # Not using pkgs directly because the consumer's nixpkgs doesn't include
   # freebuff-desktop unless overlaid.
   fbpkgs = inputs.freebuff-flake.packages.x86_64-linux;
-  iconPath = "${config.home.homeDirectory}/.local/share/freebuff/extracted/@codebufffreebuff-desktop.png";
+  # Upstream renamed the AppImage payload from @codebufffreebuff-desktop.png
+  # (0.0.63) to freebuff.png (0.0.200); the launcher extracts into this dir.
+  iconPath = "${config.home.homeDirectory}/.local/share/freebuff/extracted/freebuff.png";
 in {
   options.programs.freebuff-desktop = {
     enable = mkEnableOption "Freebuff Desktop — GitHub-native coding-agent orchestrator";

@@ -17,9 +17,13 @@ readonly APP_IMAGE="${APP_DIR}/Freebuff-x86_64.AppImage"
 readonly EXTRACTED_DIR="${APP_DIR}/extracted"
 readonly UPDATE_FILE="${APP_DIR}/.last-update-check"
 readonly UPDATE_INTERVAL=$((24 * 60 * 60))
-readonly API_URL="https://freebuff.com/api/desktop/download/linux"
-readonly FALLBACK_URL="https://github.com/CodebuffAI/codebuff-community/releases/latest/download/Freebuff-0.0.18-linux-x86_64.AppImage"
 readonly VERSION="@version@"  # replaced by Nix build
+readonly API_URL="https://freebuff.com/api/desktop/download/linux"
+# Versioned release asset — the exact artifact the Nix package builds from.
+# Do NOT download from $API_URL directly: that 302 changes target on every
+# release and since 2026-11 serves a .deb on Linux, which is not an AppImage.
+readonly ASSET_URL="https://github.com/CodebuffAI/codebuff-community/releases/download/freebuff-desktop-v${VERSION}/Freebuff-${VERSION}-linux-x86_64.AppImage"
+readonly REPO_URL="https://github.com/CodebuffAI/codebuff-community/releases/download"
 
 # ── I/O helpers ─────────────────────────────────────────────────────
 log()  { echo "[freebuff] $*"; }
@@ -32,6 +36,18 @@ cleanup() {
   exit $ec
 }
 trap cleanup EXIT
+
+# Upstream renamed the Electron binary between 0.0.63
+# (@codebufffreebuff-desktop) and 0.0.200 (freebuff). Resolve it instead of
+# hardcoding one name, so version bumps don't silently produce a launcher that
+# extracts fine but execs a missing file.
+resolve_bin() {
+  local c
+  for c in "@codebufffreebuff-desktop" "freebuff"; do
+    [ -x "${EXTRACTED_DIR}/${c}" ] && { echo "$c"; return 0; }
+  done
+  return 1
+}
 
 # ── Health diagnostic ───────────────────────────────────────────────
 health_check() {
@@ -120,17 +136,40 @@ handle_update() {
   touch "$UPDATE_FILE"
 }
 
+resolve_latest_appimage() {
+  # The freebuff.com endpoint's redirect tag tells us the newest desktop
+  # release even when the payload it serves is a .deb (as it is since
+  # 2026-11); the AppImage asset lives in the same GitHub release.
+  local location ver
+  location=$(curl -fsSI --max-time 20 "$API_URL" 2>/dev/null \
+    | awk 'tolower($1)=="location:" {print $2}' | tr -d '\r' | head -1 || true)
+  if [[ "$location" =~ freebuff-desktop-v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+    ver="${BASH_REMATCH[1]}"
+    echo "${REPO_URL}/freebuff-desktop-v${ver}/Freebuff-${ver}-linux-x86_64.AppImage"
+  fi
+}
+
 download_appimage() {
   [ -f "$APP_IMAGE" ] && return 0
 
   log "downloading Freebuff …"
   mkdir -p "$APP_DIR"
 
-  local redirect_url
-  redirect_url=$(curl -sSLI -o /dev/null -w '%{url_effective}' "$API_URL" 2>/dev/null || true)
-  local dl_url="${redirect_url:-$FALLBACK_URL}"
+  local dl_url tmp
+  dl_url=$(resolve_latest_appimage)
+  [ -z "$dl_url" ] && dl_url="$ASSET_URL"
+  tmp="${APP_IMAGE}.part"
 
-  curl -sSL -o "$APP_IMAGE" "$dl_url" || err "download failed — check network"
+  curl -fsSL --retry 3 -o "$tmp" "$dl_url" || err "download failed — check network"
+  # Never install a non-AppImage payload (upstream has served .deb from the
+  # unversioned endpoint); fall back to the pinned release asset once.
+  if ! head -c 4 "$tmp" | grep -q ELF; then
+    warn "payload from $dl_url is not an AppImage — retrying pinned asset"
+    curl -fsSL --retry 3 -o "$tmp" "$ASSET_URL" || err "download failed — check network"
+    head -c 4 "$tmp" | grep -q ELF || err "upstream did not return an AppImage (see $ASSET_URL)"
+  fi
+
+  mv -f "$tmp" "$APP_IMAGE"
   chmod +x "$APP_IMAGE"
   log "downloaded → ${APP_IMAGE}"
 }
@@ -138,7 +177,7 @@ download_appimage() {
 # ── Extraction ──────────────────────────────────────────────────────
 extract_appimage() {
   # Re-extract when the AppImage file is newer than the marker
-  if [ -x "${EXTRACTED_DIR}/AppRun" ] && [ -x "${EXTRACTED_DIR}/@codebufffreebuff-desktop" ]; then
+  if [ -x "${EXTRACTED_DIR}/AppRun" ] && resolve_bin >/dev/null; then
     if [ -f "$APP_IMAGE" ] && [ "${EXTRACTED_DIR}/.appimage-mtime" -nt "$APP_IMAGE" ] 2>/dev/null; then
       return 0
     fi
@@ -161,8 +200,9 @@ extract_appimage() {
     err "no extraction method available — install 7z / p7zip"
   fi
 
-  chmod +x "$EXTRACTED_DIR/AppRun" \
-         "$EXTRACTED_DIR/@codebufffreebuff-desktop" 2>/dev/null || true
+  chmod +x "$EXTRACTED_DIR/AppRun" 2>/dev/null || true
+  chmod +x "$EXTRACTED_DIR/@codebufffreebuff-desktop" \
+         "$EXTRACTED_DIR/freebuff" 2>/dev/null || true
 
   touch -r "$APP_IMAGE" "${EXTRACTED_DIR}/.appimage-mtime" 2>/dev/null || true
   log "extraction complete"
@@ -223,12 +263,16 @@ main() {
   [ -L "/run/opengl-driver" ] && export NVIDIA_DRIVER="$nvidia_driver"
 
   # GLVND EGL vendor config
+  # Initialised up front: with `set -u`, an unset value here aborts the
+  # launcher on any host without /run/opengl-driver.
   local egl_vendor_dir="${nvidia_driver}/share/glvnd/egl_vendor.d"
-  [ -d "$egl_vendor_dir" ] && __EGL_VENDOR_LIBRARY_FILENAMES=""
-  for f in "$egl_vendor_dir"/10_nvidia.json "$egl_vendor_dir"/50_mesa.json; do
-    [ -f "$f" ] && __EGL_VENDOR_LIBRARY_FILENAMES="${__EGL_VENDOR_LIBRARY_FILENAMES:+$__EGL_VENDOR_LIBRARY_FILENAMES:}$f"
-  done
-  [ -n "$__EGL_VENDOR_LIBRARY_FILENAMES" ] && export __EGL_VENDOR_LIBRARY_FILENAMES
+  local __EGL_VENDOR_LIBRARY_FILENAMES=""
+  if [ -n "$nvidia_driver" ] && [ -d "$egl_vendor_dir" ]; then
+    for f in "$egl_vendor_dir"/10_nvidia.json "$egl_vendor_dir"/50_mesa.json; do
+      [ -f "$f" ] && __EGL_VENDOR_LIBRARY_FILENAMES="${__EGL_VENDOR_LIBRARY_FILENAMES:+$__EGL_VENDOR_LIBRARY_FILENAMES:}$f"
+    done
+    [ -n "$__EGL_VENDOR_LIBRARY_FILENAMES" ] && export __EGL_VENDOR_LIBRARY_FILENAMES
+  fi
 
   export LIBGL_DRIVERS_PATH="${nvidia_driver:+$nvidia_driver/lib/dri:}/run/current-system/sw/lib/dri"
   export VK_ICD_FILENAMES="/run/opengl-driver/share/vulkan/icd.d/nvidia_icd.x86_64.json"
@@ -241,8 +285,10 @@ main() {
   export GDK_BACKEND=wayland
 
   cd "$EXTRACTED_DIR"
+  local exe_name
+  exe_name=$(resolve_bin) || err "could not find the Freebuff binary in ${EXTRACTED_DIR}"
   log "launching Freebuff v${VERSION} …"
-  exec ./@codebufffreebuff-desktop \
+  exec "./${exe_name}" \
     --no-sandbox \
     --disable-gpu-sandbox \
     "$@"
