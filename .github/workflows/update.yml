@@ -30,12 +30,21 @@ jobs:
           # asset URL if this is absent.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          OUT=$(scripts/bump-version.sh 2>&1)
+          # The if-condition form captures the exit code even under `bash -e`.
+          if OUT=$(scripts/bump-version.sh 2>&1); then
+            rc=0
+          else
+            rc=$?
+          fi
           echo "$OUT"
           echo "result<<HEREDOC" >> $GITHUB_OUTPUT
           echo "$OUT" >> $GITHUB_OUTPUT
           echo "HEREDOC" >> $GITHUB_OUTPUT
-          # Detect if an update actually happened
+          if [[ $rc -ne 0 ]]; then
+            echo "::error::bump script failed with exit $rc"
+            exit "$rc"
+          fi
+          # Detect if an update actually happened (only on success)
           if echo "$OUT" | grep -q "Update complete"; then
             echo "updated=true" >> $GITHUB_OUTPUT
           else

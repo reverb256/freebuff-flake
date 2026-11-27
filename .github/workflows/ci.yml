@@ -9,7 +9,10 @@ on:
 jobs:
   build:
     name: Build freebuff-desktop
-    runs-on: arc-freebuff-flake
+    # Fork PRs are untrusted code. Quill's CI jobs use this same head-repo
+    # guard to route forks off the self-hosted pool onto hosted runners;
+    # the Cachix token step below is skipped for them as well.
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'arc-freebuff-flake' || 'ubuntu-latest' }}
     env:
       # The self-hosted ARC runner pod has no USER in its environment;
       # cachix-action aborts with "$USER must be set" without it.
@@ -27,6 +30,7 @@ jobs:
           nix_path: nixpkgs=channel:nixos-unstable
 
       - name: Setup Cachix
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         uses: cachix/cachix-action@v17
         with:
           name: reverb-os
